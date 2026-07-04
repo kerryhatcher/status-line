@@ -362,7 +362,7 @@ def main() -> None:
                 bridge.write_text(json.dumps({
                     "session_id": session,
                     "remaining_percentage": remaining,
-                    "used_pct": round(100 - remaining),
+                    "used_pct": used,
                     "timestamp": int(time.time()),
                 }))
             except Exception:
