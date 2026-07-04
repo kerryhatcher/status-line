@@ -2,17 +2,16 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Claude Code statusline — ported from gsd-statusline.js (open-gsd/gsd-core next branch).
+"""Claude Code statusline.
 
 Reads a JSON payload from stdin (Claude Code's statusLine hook protocol) and writes
-a formatted statusline string to stdout. All GSD-specific items (update notices,
-stale-hooks warnings) have been removed; everything else is preserved exactly.
+a formatted statusline string to stdout.
 
 Layout (position=end, default):
-  <dim>model</dim> │ <bold>task</bold>|<dim>state</dim> │ <dim>dirname</dim> <ctx-bar>
+  <dim>model</dim> │ <bold>task</bold>|<dim>speckit state</dim> │ <dim>dirname</dim> <ctx-bar>
 
 Layout (position=front):
-  <dim>model</dim><ctx-bar> │ <bold>task</bold>|<dim>state</dim> │ <dim>dirname</dim>
+  <dim>model</dim><ctx-bar> │ <bold>task</bold>|<dim>speckit state</dim> │ <dim>dirname</dim>
 """
 
 import json
@@ -29,11 +28,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 def read_project_config(cwd: str) -> dict:
-    """Walk up from cwd looking for .planning/config.json."""
+    """Walk up from cwd looking for .claude/statusbar.json."""
     home = Path.home()
     current = Path(cwd).resolve()
     for _ in range(10):
-        candidate = current / ".planning" / "config.json"
+        candidate = current / ".claude" / "statusbar.json"
         if candidate.exists():
             try:
                 return json.loads(candidate.read_text()) or {}
@@ -98,101 +97,8 @@ def read_last_slash_command(transcript_path: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# .planning/STATE.md reader + parser
+# speckit feature dir + state
 # ---------------------------------------------------------------------------
-
-def read_project_state(cwd: str) -> dict | None:
-    """Walk up from cwd looking for .planning/STATE.md."""
-    home = Path.home()
-    current = Path(cwd).resolve()
-    for _ in range(10):
-        candidate = current / ".planning" / "STATE.md"
-        if candidate.exists():
-            try:
-                return parse_state_md(candidate.read_text())
-            except Exception:
-                return None
-        parent = current.parent
-        if parent == current or current == home:
-            break
-        current = parent
-    return None
-
-
-def parse_state_md(content: str) -> dict:
-    """Parse STATE.md frontmatter and Phase body line into a state dict."""
-    state: dict = {}
-
-    fm_match = re.match(r"^---\n([\s\S]*?)\n---", content)
-    if fm_match:
-        fm = fm_match.group(1)
-
-        # Scalar fields
-        for line in fm.split("\n"):
-            m = re.match(r"^(\w+):\s*(.+)", line)
-            if not m:
-                continue
-            key, val = m.group(1), m.group(2).strip().strip("\"'")
-            if key == "status":
-                state["status"] = None if val == "null" else val
-            elif key == "milestone":
-                state["milestone"] = None if val == "null" else val
-            elif key == "milestone_name":
-                state["milestone_name"] = None if val == "null" else val
-            elif key == "active_phase":
-                state["active_phase"] = None if val in ("null", "") else val
-            elif key == "next_action":
-                state["next_action"] = None if val in ("null", "") else val
-
-        # next_phases: flow [a, b] or block list
-        np_flow = re.search(r"^next_phases:\s*\[([^\]]*)\]", fm, re.M)
-        if np_flow:
-            items = [s.strip().strip("\"'") for s in np_flow.group(1).split(",") if s.strip()]
-            state["next_phases"] = items or None
-        else:
-            np_block = re.search(r"^next_phases:\s*\n((?:[ \t]*-[ \t]*[^\n]+\n?)*)", fm, re.M)
-            if np_block:
-                items = []
-                for line in np_block.group(1).split("\n"):
-                    bm = re.match(r"^[ \t]*-[ \t]*(.+)$", line)
-                    if bm:
-                        items.append(bm.group(1).strip().strip("\"'"))
-                state["next_phases"] = [i for i in items if i] or None
-
-        # progress: nested block
-        prog = re.search(r"^progress:\s*\n((?:[ \t]+\w+:.+\n?)+)", fm, re.M)
-        if prog:
-            pb = prog.group(1)
-            for field, key in [
-                (r"completed_phases", "completed_phases"),
-                (r"total_phases", "total_phases"),
-                (r"percent", "percent"),
-            ]:
-                m2 = re.search(rf"^[ \t]+{field}:\s*(\d+)", pb, re.M)
-                if m2:
-                    state[key] = m2.group(1)
-
-    # Phase: N of M (name)
-    phase_m = re.search(r"^Phase:\s*(\d+)\s+of\s+(\d+)(?:\s+\(([^)]+)\))?", content, re.M)
-    if phase_m:
-        state["phase_num"] = phase_m.group(1)
-        state["phase_total"] = phase_m.group(2)
-        state["phase_name"] = phase_m.group(3)  # may be None
-
-    # Fallback: Status: in body when frontmatter absent
-    if not state.get("status"):
-        body_s = re.search(r"^Status:\s*(.+)", content, re.M)
-        if body_s:
-            raw = body_s.group(1).strip().lower()
-            if "ready to plan" in raw or "planning" in raw:
-                state["status"] = "planning"
-            elif "execut" in raw:
-                state["status"] = "executing"
-            elif "complet" in raw or "archived" in raw:
-                state["status"] = "complete"
-
-    return state
-
 
 def find_speckit_feature_dir(cwd: str) -> Path | None:
     """Locate the active speckit feature dir (specs/NNN-slug/).
@@ -282,47 +188,6 @@ def render_progress_bar(percent) -> str:
         return ""
     bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
     return f"[{bar}] {pct}%"
-
-
-def format_state(s: dict) -> str:
-    """Format a state dict into a human-readable statusline segment."""
-    parts: list[str] = []
-
-    # Milestone segment
-    if s.get("milestone") or s.get("milestone_name"):
-        ver = s.get("milestone") or ""
-        name = s.get("milestone_name") or ""
-        if name == "milestone":
-            name = ""
-        bar = render_progress_bar(s.get("percent"))
-        pieces = [p for p in [ver, name, bar] if p]
-        if pieces:
-            parts.append(" ".join(pieces))
-
-    phases_str = "/".join(s["next_phases"]) if s.get("next_phases") else None
-
-    if s.get("active_phase"):
-        stage = s.get("status") or ""
-        seg = f"Phase {s['active_phase']} {stage}".strip() if stage else f"Phase {s['active_phase']}"
-        parts.append(seg)
-    elif s.get("next_action") and phases_str:
-        parts.append(f"next {s['next_action']} {phases_str}")
-    elif int(s.get("percent") or 0) == 100 or (
-        s.get("completed_phases")
-        and s.get("total_phases")
-        and s["completed_phases"] == s["total_phases"]
-    ):
-        parts.append("milestone complete")
-    else:
-        if s.get("status"):
-            parts.append(s["status"])
-        if s.get("phase_num") and s.get("phase_total"):
-            if s.get("phase_name"):
-                parts.append(f"{s['phase_name']} ({s['phase_num']}/{s['phase_total']})")
-            else:
-                parts.append(f"ph {s['phase_num']}/{s['phase_total']}")
-
-    return " · ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -489,33 +354,28 @@ def main() -> None:
                 todos = json.loads(latest.read_text())
                 in_prog = next((t for t in todos if t.get("status") == "in_progress"), None)
                 if in_prog:
-                    # activeForm is GSD's display label; fall back to content
+                    # activeForm is TodoWrite's present-continuous label; fall back to content
                     task = in_prog.get("activeForm") or in_prog.get("content") or ""
         except Exception:
             pass
 
-    # --- Project state from .planning/STATE.md, falling back to speckit
-    # (shown when no active todo) ---------------------------------------
+    # --- speckit feature state (shown when no active todo) ------------------
     state_str = ""
     if not task:
-        state = read_project_state(cwd)
-        if state:
-            state_str = format_state(state)
-        else:
-            speckit_state = read_speckit_state(cwd, data.get("transcript_path"))
-            if speckit_state:
-                state_str = format_speckit_state(speckit_state)
+        speckit_state = read_speckit_state(cwd, data.get("transcript_path"))
+        if speckit_state:
+            state_str = format_speckit_state(speckit_state)
 
     # --- Config (context position, last slash command) ----------------------
     last_cmd_suffix = ""
     position = "end"
     try:
         cfg = read_project_config(cwd)
-        if get_config_value(cfg, "statusline.show_last_command") is True:
+        if get_config_value(cfg, "show_last_command") is True:
             last_cmd = read_last_slash_command(data.get("transcript_path"))
             if last_cmd:
                 last_cmd_suffix = f" │ {DIM}last: /{last_cmd}{RESET}"
-        cfg_pos = get_config_value(cfg, "statusline.context_position")
+        cfg_pos = get_config_value(cfg, "context_position")
         if cfg_pos is not None:
             position = cfg_pos
     except Exception:
