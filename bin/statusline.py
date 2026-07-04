@@ -138,42 +138,100 @@ def find_speckit_feature_dir(cwd: str) -> Path | None:
 
 
 def read_speckit_state(cwd: str, transcript_path: str | None) -> dict | None:
-    """Infer the current speckit step from feature-dir artifacts and tasks.md checkboxes."""
+    """Infer full speckit chain progress: constitution, spec, clarify, plan,
+    checklist, tasks, analyze (via marker), implement (checkbox %), converge.
+    """
     feature_dir = find_speckit_feature_dir(cwd)
     if feature_dir is None:
         return None
 
+    repo_root = feature_dir.parent.parent
     state: dict = {"slug": feature_dir.name}
 
-    tasks_path = feature_dir / "tasks.md"
-    if tasks_path.exists():
-        state["artifact_step"] = "tasks"
+    state["has_constitution"] = (repo_root / ".specify" / "memory" / "constitution.md").exists()
+
+    spec_path = feature_dir / "spec.md"
+    state["has_spec"] = spec_path.exists()
+    state["has_clarifications"] = False
+    if state["has_spec"]:
         try:
-            content = tasks_path.read_text()
-            total = len(re.findall(r"^- \[[ xX]\]", content, re.M))
-            done = len(re.findall(r"^- \[[xX]\]", content, re.M))
+            state["has_clarifications"] = bool(re.search(r"^## Clarifications", spec_path.read_text(), re.M))
+        except Exception:
+            pass
+
+    state["has_plan"] = (feature_dir / "plan.md").exists()
+
+    checklists_dir = feature_dir / "checklists"
+    state["has_checklist"] = checklists_dir.is_dir() and any(p.is_file() for p in checklists_dir.iterdir())
+
+    tasks_path = feature_dir / "tasks.md"
+    state["has_tasks"] = tasks_path.exists()
+    tasks_content = ""
+    if state["has_tasks"]:
+        try:
+            tasks_content = tasks_path.read_text()
+            total = len(re.findall(r"^- \[[ xX]\]", tasks_content, re.M))
+            done = len(re.findall(r"^- \[[xX]\]", tasks_content, re.M))
             if total:
                 state["percent"] = round(done / total * 100)
         except Exception:
             pass
-    elif (feature_dir / "plan.md").exists():
-        state["artifact_step"] = "plan"
-    elif (feature_dir / "spec.md").exists():
-        state["artifact_step"] = "specify"
+    state["has_converged"] = bool(re.search(r"^##\s+Phase\s+\d+:\s*Convergence", tasks_content, re.M))
 
     last_cmd = read_last_slash_command(transcript_path)
     if last_cmd and last_cmd.startswith("speckit."):
         state["last_command"] = last_cmd[len("speckit."):]
 
+    # analyze leaves no artifact on disk, so its completion is remembered in a
+    # small per-feature marker (written once, right after it's detected as
+    # the last slash command run) so it survives across sessions/breaks.
+    marker_path = feature_dir / ".speckit-log.yaml"
+    analyzed = False
+    try:
+        if marker_path.exists():
+            analyzed = bool((yaml.safe_load(marker_path.read_text()) or {}).get("analyzed"))
+    except Exception:
+        analyzed = False
+    if not analyzed and state.get("last_command") == "analyze":
+        try:
+            marker_path.write_text(yaml.safe_dump({"analyzed": True}))
+            analyzed = True
+        except Exception:
+            pass
+    state["analyzed"] = analyzed
+
+    state["next"] = next_speckit_command(state)
     return state
 
 
+def next_speckit_command(s: dict) -> str | None:
+    """Return the next speckit.* command for this feature, or None once converged."""
+    if not s.get("has_constitution"):
+        return "constitution"
+    if not s.get("has_spec"):
+        return "specify"
+    if not s.get("has_clarifications"):
+        return "clarify"
+    if not s.get("has_plan"):
+        return "plan"
+    if not s.get("has_checklist"):
+        return "checklist"
+    if not s.get("has_tasks"):
+        return "tasks"
+    if not s.get("analyzed"):
+        return "analyze"
+    if s.get("percent") is not None and s["percent"] < 100:
+        return "implement"
+    if not s.get("has_converged"):
+        return "converge"
+    return None
+
+
 def format_speckit_state(s: dict) -> str:
-    """Format a speckit state dict: slug · step/last-command · progress bar."""
+    """Format a speckit state dict: slug · next command (or done) · progress bar."""
     parts = [s["slug"]]
-    label = s.get("last_command") or s.get("artifact_step")
-    if label:
-        parts.append(label)
+    nxt = s.get("next")
+    parts.append(f"next: {nxt}" if nxt else "done")
     if s.get("percent") is not None:
         bar = render_progress_bar(s["percent"])
         if bar:
