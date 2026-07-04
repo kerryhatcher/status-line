@@ -22,16 +22,16 @@ context_position: front
 
 ### 1. Add the marketplace
 
-This plugin doesn't ship its own `marketplace.json`, so it's distributed via [kerryhatcher/plugin-marketplace](https://github.com/kerryhatcher/plugin-marketplace). Register that marketplace first:
+This plugin doesn't ship its own `marketplace.json`, so it's distributed via [kerryhatcher/hatch-plugins](https://github.com/kerryhatcher/hatch-plugins). Register that marketplace first:
 
 ```bash
-claude plugin marketplace add kerryhatcher/plugin-marketplace
+claude plugin marketplace add kerryhatcher/hatch-plugins
 ```
 
 ### 2. Install the plugin
 
 ```bash
-claude plugin install status-line@plugin-marketplace
+claude plugin install status-line@hatch-plugins
 ```
 
 This gives you the `/status-line:setup` command and `bin/statusline.py`, resolved via `${CLAUDE_PLUGIN_ROOT}` — see the next step to actually enable it.
