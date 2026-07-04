@@ -26,26 +26,23 @@ context_position: front
 claude plugin install kerryhatcher/status-line
 ```
 
-This places `bin/statusline.py` on your PATH via the plugin system.
+This gives you the `/status-line:setup` command and `bin/statusline.py`, resolved via `${CLAUDE_PLUGIN_ROOT}` — see the next step to actually enable it.
 
 ### 2. Enable the status line
 
-Add to your Claude Code **settings.json** (`~/.claude/settings.json`):
+> **Note:** Claude Code plugins cannot ship a default `statusLine` config — it must be set in your own settings. Installing the plugin alone doesn't turn it on.
 
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "statusline.py"
-  }
-}
+Run the setup command this plugin provides:
+
+```
+/status-line:setup
 ```
 
-> **Note:** Claude Code plugins cannot ship a default `statusLine` config — it must be set in your user settings. The `bin/` directory is added to PATH automatically, so the script is invokable by name.
+This dispatches Claude Code's built-in `statusline-setup` agent, which edits your `~/.claude/settings.json` for you (preserving everything else already in it) and points `statusLine` at this plugin's script. Start a new Claude Code session afterward — statusline config is only read at session start.
 
-### Alternative: full path
+### Manual alternative
 
-If you prefer not to rely on PATH resolution:
+If you'd rather edit it yourself, or the command isn't available for some reason, you can ask Claude directly ("use the statusline-setup agent to configure my statusline") or add this to `~/.claude/settings.json` by hand:
 
 ```json
 {
@@ -55,6 +52,8 @@ If you prefer not to rely on PATH resolution:
   }
 }
 ```
+
+`${CLAUDE_PLUGIN_ROOT}` is resolved by Claude Code once the plugin is installed, so this works regardless of PATH. (An older revision of this README suggested a bare `statusline.py` relying on PATH resolution — prefer the full path above.)
 
 ## Configuration
 
