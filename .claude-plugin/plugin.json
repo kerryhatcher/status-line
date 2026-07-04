@@ -1,0 +1,11 @@
+{
+  "name": "status-line",
+  "displayName": "Status Line",
+  "version": "0.1.0",
+  "description": "A rich terminal status line for Claude Code showing model, context usage, active tasks, and project state.",
+  "author": {
+    "name": "Kerry Hatcher"
+  },
+  "repository": "https://github.com/kerryhatcher/status-line",
+  "license": "MIT"
+}
