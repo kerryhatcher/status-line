@@ -20,15 +20,23 @@ context_position: front
 
 ## Install
 
-### 1. Install the plugin
+### 1. Add the marketplace
+
+This plugin doesn't ship its own `marketplace.json`, so it's distributed via [kerryhatcher/plugin-marketplace](https://github.com/kerryhatcher/plugin-marketplace). Register that marketplace first:
 
 ```bash
-claude plugin install kerryhatcher/status-line
+claude plugin marketplace add kerryhatcher/plugin-marketplace
+```
+
+### 2. Install the plugin
+
+```bash
+claude plugin install status-line@plugin-marketplace
 ```
 
 This gives you the `/status-line:setup` command and `bin/statusline.py`, resolved via `${CLAUDE_PLUGIN_ROOT}` — see the next step to actually enable it.
 
-### 2. Enable the status line
+### 3. Enable the status line
 
 > **Note:** Claude Code plugins cannot ship a default `statusLine` config — it must be set in your own settings. Installing the plugin alone doesn't turn it on.
 
