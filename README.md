@@ -13,9 +13,9 @@ Row 1 segments: `model` · `task / speckit state` · `directory` · `context bar
 
 Row 2 (shown only when rate-limit data is available): `5h`/`wk` usage meters and reset times, kept on their own line so they don't crowd the primary row.
 
-Position defaults to **end** (right-aligned). Toggle with `.claude/statusbar.json`:
-```json
-{ "context_position": "front" }
+Position defaults to **end** (right-aligned). Toggle with `.claude/statusbar.yaml`:
+```yaml
+context_position: front
 ```
 
 ## Install
@@ -58,7 +58,12 @@ If you prefer not to rely on PATH resolution:
 
 ## Configuration
 
-Create `.claude/statusbar.json` in any project to customize behavior (walks up from the current directory, same as the speckit lookup below):
+Create `.claude/statusbar.yaml` in any project to customize behavior (walks up from the current directory, same as the speckit lookup below):
+
+```yaml
+context_position: front
+show_last_command: true
+```
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

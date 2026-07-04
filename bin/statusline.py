@@ -1,6 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
 # ///
 """Claude Code statusline.
 
@@ -22,20 +23,22 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 
 # ---------------------------------------------------------------------------
 # Config helpers
 # ---------------------------------------------------------------------------
 
 def read_project_config(cwd: str) -> dict:
-    """Walk up from cwd looking for .claude/statusbar.json."""
+    """Walk up from cwd looking for .claude/statusbar.yaml."""
     home = Path.home()
     current = Path(cwd).resolve()
     for _ in range(10):
-        candidate = current / ".claude" / "statusbar.json"
+        candidate = current / ".claude" / "statusbar.yaml"
         if candidate.exists():
             try:
-                return json.loads(candidate.read_text()) or {}
+                return yaml.safe_load(candidate.read_text()) or {}
             except Exception:
                 return {}
         parent = current.parent
